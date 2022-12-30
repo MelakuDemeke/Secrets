@@ -28,13 +28,14 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 mongoose.set('strictQuery', false);
-mongoose.connect('mongodb://127.0.0.1:27017/secretsDB')
+mongoose.connect('mongodb://127.0.0.1:27017/secretsDB');
 
 const userSchema = new mongoose.Schema({
     email: String,
     password: String,
     googleId: String,
-    facebookId: String
+    facebookId: String,
+    secret: String
 });
 
 userSchema.plugin(pasportLocalMongoose);
@@ -64,8 +65,7 @@ passport.use(new GoogleStrategy({
     userProfileURL: "https://www.googleapis.com/oauth2/v3/userinfo"
   },
   function(accessToken, refreshToken, profile, cb) {
-    console.log(profile);
-    User.findOrCreate({ googleId: profile.id }, function (err, user) {
+    User.findOrCreate({ googleId: profile.id, email: profile.displayName }, function (err, user) {
       return cb(err, user);
     });
   }
@@ -77,7 +77,7 @@ passport.use(new FacebookStrategy({
     callbackURL: "http://localhost:3000/auth/facebook/secrets"
   },
   function(accessToken, refreshToken, profile, cb) {
-    console.log(profile);
+    // console.log(profile);
     User.findOrCreate({ facebookId: profile.id, email: profile.email }, function (err, user) {
       return cb(err, user);
     });
@@ -120,11 +120,15 @@ app.get("/register",(req,res)=>{
 });
 
 app.get("/secrets",function(req,res){
-    if(req.isAuthenticated()){
-        res.render("secrets");
-    }else{
-        res.redirect("/login")
+   User.find({"secret": {$ne: null}}, function(err, foundUser){
+    if (err){
+      console.log(err);
+    } else {
+      if(foundUser){
+        res.render("secrets",{usersWithSecrets: foundUser});
+      }
     }
+   });
 });
 
 app.get("/logout",function(req, res){
@@ -166,6 +170,34 @@ app.post("/login", (req,res)=>{
         }
     });
 });
+
+app.get("/submit", function(req, res){
+	if (req.isAuthenticated()){
+	  res.render("submit");
+	} else {
+	  res.redirect("/login");
+	}
+  });
+  
+  app.post("/submit", function(req, res){
+	const submittedSecret = req.body.secret;
+
+	User.findById(req.user.id, function(err, foundUser){
+	  if (err) {
+		console.log(err);
+		console.log("error");
+	  } else {
+		if (foundUser) {
+      console.log(foundUser);
+		  foundUser.secret = submittedSecret;
+		  foundUser.save(function(){
+        console.log("save happend");
+			res.redirect("/secrets");
+		  });
+		}
+	  }
+	});
+  });
 
 app.listen("3000",()=> {
     console.log("server started at http://localhost:3000");
